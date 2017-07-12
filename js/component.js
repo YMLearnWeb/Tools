@@ -1,11 +1,11 @@
-var Events = require('./event.js');
+var events = require('./event.js');
 var $ = require('jquery');
+var move = require('./move.js')
 
-module.exports = Component;
 var Component = (function(){
   function fileModel (){
     this._files = [];
-    this.filesAdded = new Events.eventbus.Event(this);
+    this.filesAdded = new events.Events(this);
   }
 
   fileModel.prototype = {
@@ -29,7 +29,7 @@ var Component = (function(){
     this._elements = elements;
     this._files = "";
 
-    this.dropBoxDropped = new Events.eventbus.Event(this);
+    this.dropBoxDropped = new events.Events(this);
 
     var _this = this;
     //attach model listeners;
@@ -64,9 +64,10 @@ var Component = (function(){
       var liNodes = [];
       for(var i in items){
         var node =  (_this._elements.template).cloneNode(true);
+        node.Id = 'index_'+i;
         var img = document.createElement("img");
         img.classList.add('index_'+i);
-        img.classList.add('image-self')
+        img.classList.add('image-self');
         node.appendChild(img);
         // ulNode.appendChild(node)
         liNodes.push(node);
@@ -96,6 +97,7 @@ var Component = (function(){
       for(var j = 0; j<liNodeCount; j++){
         _this._elements.root.appendChild(liNodes[j]);
       }
+      move.Move().excute();// add move control
     }
   }
 
@@ -114,13 +116,17 @@ var Component = (function(){
     }
   }
 
-  $(function(){
-    var model = new fileModel();
-    var view = new imageView(model,{
-      'dropBox': document.getElementById('dropBox'),
-      'root': document.getElementById('imageList'),
-      'template':document.querySelector('.imageWrapper')
-    });
-    var imagecontrol = new imageControl(model,view)
-  })
-})()
+  function Excute(){
+      var model = new fileModel();
+      var view = new imageView(model,{
+        'dropBox': document.getElementById('dropBox'),
+        'root': document.getElementById('imageList'),
+        'template':document.querySelector('.imageWrapper')
+      });
+      var imagecontrol = new imageControl(model,view)
+  }
+
+  return {excute: Excute};
+});
+
+module.exports.Component = Component;
