@@ -1,9 +1,22 @@
+var Events = function(sender){
+    this._sender = sender;
+    this._listeners = []
+};
+Events.prototype.attach = function(listener){
+    this._listeners.push(listener);
+}
+Events.prototype.notify = function(args){
+    for(var i =0; i<this._listeners.length;i++){
+        this._listeners[i](_sender,args);
+    }
+}
+
 var ShoppingCart = function($){
     "use strict";
 /*
  *service call
  */
-var sendTime;
+var sendTime,getCartCall;
 /*
  *url: "/Cart/RemoveCartItem"
  * @param {string} id
@@ -94,11 +107,11 @@ function callUpdateQuantity(id,quantities,checkedItem,fn){
 *@param date sendTime
 */
 
-function callGetCart(checkedItem,fn){
-	if(call && call.readyState != 4){
-		call.abort();
+function callGetCart(checkedItem){
+	if(getCartCall && call.readyState != 4){
+		getCartCall.abort();
 	}
-	var call = $.ajax({
+	getCartCall = $.ajax({
 		url: "/Cart/GetCart",
 		data: {
 			items: function () {
@@ -139,9 +152,15 @@ function callGetCart(checkedItem,fn){
      this._actualPerPrice = actualPerPrice;
      this._finalAmount = finalAmount;
      this._inventorShort = inventoryShort; //true : shortage
+
+     //register events
+     this.priceUpdated = new Events("i_priceupdated");
+     this.quantityUpdated = new Events('i_updateQuantity');
+     this.statusUpdated = new Events('i_updatestatus');
+     this.inventoryChecked = new Events('i_checkInventory');
  }
 
- Item.prototype.updatePrice = function(op,ap,fa,i_notifyupdateprice){
+ Item.prototype.updatePrice = function(op,ap,fa,){
      if(this._originalPerPrice !== op){
          this._originalPerPrice = op;
      }
@@ -151,21 +170,22 @@ function callGetCart(checkedItem,fn){
      if(this._finalAmount !== fa){
          this._finalAmount = fa;
      }
-     i_notifyupdateprice();
+     this.priceUpdated.notify(this);
  };
 
  Item.prototype.updateQuantity = function(num){
      this._quantity = num;
+     this.quantityUpdated.notify(this);
  };
 
-Item.prototype.updateStatus = function(status,i_notifyupdatestatus){
+Item.prototype.updateStatus = function(status){
     this._status = status;
-    i_notifyupdatestatus();
+    this.statusUpdated.notify(this)
 };
 
-Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
+Item.prototype.checkInventory = function(inventorShort){
     this._inventorShort = inventoryShort;
-    i_notifyinventoryshort();
+    this.inventoryChecked.notify(this);
 };
 /*
  * @Class Cart
@@ -177,6 +197,16 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
  	this._finalAmount = 0;
  	this._discountAmount = 0;
  	this._minusAmount = 0;
+
+    this.allCleared = new Events(this);
+    this.allSelected = new Events(this);
+    this.deAllSelected = new Events(this);
+    this.itemRemoved = new Events(this);
+    this.itemsRemoved = new Events(this);
+    this.quantityGot = new Events(this);
+    this.quantitySaved = new Events(this);
+    this.checkChanged = new Events(this);
+
  }
 
  Cart.prototype= {
@@ -186,12 +216,13 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
 	 	this.finalAmount = 0;
 	 	this.discountAmount = 0;
 	 	this.minusAmount = 0;
+        this.allCleared.notify();
  	},
- 	selectAll: function(callback){
+ 	selectAll: function(){
  		var self = this;
  		for(var key in self.itemGroups){
  			if(self.itemGroups[key].status === false)
- 			self.itemGroups[key].status = true;
+ 			self.itemGroups[key].updateStatus(true);
  			self.checkedItem.push(i);
  		}
 
@@ -200,32 +231,34 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
  			self.finalAmount = data.finalAmount;
  			self.minusAmount = data.minuseAmount;
 
+            self.allSelected.notify();
+
  			//observer item inventory and price
  			$.each(data.items, function (i,t) {
 				var id = d.itemId;
 				self.observeItemPrice(self.itemGroups[id], d);
 			});
-			callback(self);
+			
  		});
  	},
- 	deSelectAll:function(callback){
+ 	deSelectAll:function(){
  		var self = this;
  		for (var key in self.itemGroups){
  			if(self.itemGroups[key].status === true)
- 			self.itemGroups[key].status = false;
+ 			self.itemGroups[key].updateStatus(false);
  		}
  		self.checkedItem = [];
  		callGetCart(Self.checkedItem,function(data){
  			self.discountAmount = data.discountAmount;
  			self.finalAmount = data.finalAmount;
  			self.minusAmount = data.minuseAmount;
+            self.allSelected.notify();
 
  			//observer item inventory and price
  			$.each(data.items, function (i,d) {
 				var id = d.itemId;
 				self.observeItemPrice(self.itemGroups[id], d);
 			});
-			callback(self);
  		});
  	},
  	addItem:function(Item){
@@ -234,7 +267,7 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
  			this.checkedItem.push(Item.id);
  		}
  	},
- 	removeItem: function(Item,callback){
+ 	removeItem: function(Item){
  		var self = this;
  		delete self.itemGroups[Item.id];
  		_.remove(self.checkedItem,function(n){
@@ -244,16 +277,17 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
  			self.discountAmount = data.discountAmount;
  			self.finalAmount = data.finalAmount;
  			self.minusAmount = data.minuseAmount;
+            self.itemRemoved.notify();
 
  			//observer item inventory and price
  			$.each(data.items, function (i,d) {
 				var id = d.itemId;
 				self.observeItemPrice(self.itemGroups[id], d);
 			});
-			callback(self);
  		});
  	},
- 	removeItems:function(Items,callback){
+ 	removeItems:function(Items){
+        getCartCall.abort();
 		sendTime = Date.now();
  		var self = this;
  		for(var i =0; i<self.checkedItem.length;i++){
@@ -263,8 +297,22 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
 		self.discountAmount = 0;
  		self.finalAmount = 0;
  		self.minusAmount = 0;
+        self.itemsRemoved.notify();
+        //Todo
+        callRemoveItems(Item.id, self.checkedItem,function(data){
+            self.discountAmount = data.discountAmount;
+            self.finalAmount = data.finalAmount;
+            self.minusAmount = data.minuseAmount;
+            self.itemRemoved.notify();
+
+            //observer item inventory and price
+            $.each(data.items, function (i,d) {
+                var id = d.itemId;
+                self.observeItemPrice(self.itemGroups[id], d);
+            });
+        });
  	},
- 	changeQuantity:function(Item,c_notifychangequantity){
+ 	changeQuantity:function(Item){
 		/*
 		 * Item has sizes, subItem, each has its inventory and quantity
 		 * notify function returns inventory message
@@ -291,16 +339,17 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
 		}
 		// var quantity = Item.quantity; //Item sum quantity
 		//init
+        var self = this;
 		callGetQuantity(Item,function(data){
 			for(var key in data){
 				Item[key] = new subItem();
 				Item[key]._inventory = data[key].inventory;
 				Item[key]._quantity = data[key].quantity;
 			}
-            c_notifychangequantity();
+            self.quantityGot.notify();
 		})
  	},
-    saveQuantity:function(Item,c_notifysavequantity){
+    saveQuantity:function(Item){
         var self = this;
         var quantities = {};
         for(var key in Item){
@@ -312,16 +361,18 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
             self._discountAmount = data.discountAmount;
             self._finalAmount = data.finalAmount;
             self._minusAmount = data.minuseAmount;
-            Item._quantity = data.quantity;
+            self.quantityUpdated.notify();
+            //todo
+            Item.updateQuantity(data.quantity);
             //observer item inventory and price
             $.each(data.items, function (i,d) {
                 var id = d.itemId;
                 self.observeItemPrice(self.itemGroups[id], d);
             });
-            c_notifysavequantity();
+            
         })
-    }
- 	changeCheck: function(Item,check,c_notifychangecheck){
+    },
+ 	changeCheck: function(Item,check){
 		var self = this;
         // Item.updateStatus(check);
 		if(check){
@@ -331,30 +382,30 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
 				return n == Item.id;
 			})
 		}
-        c_notifychangecheck();
-    },
-    checkedItemUpdate: function(){
+
         if(self._checkedItem.length > 0){
             setTimeout(function(){
                 callGetCart(self.checkedItem,function(data){
                     self.discountAmount = data.discountAmount;
                     self.finalAmount = data.finalAmount;
                     self.minusAmount = data.minuseAmount;
+                    self.checkChanged.notify();
 
                     //observer item inventory and price
                     $.each(data.items, function (i,d) {
                         var id = d.itemId;
                         self.observeItemPrice(self.itemGroups[id], d);
                     });
-                    c_notifychangecheck();
+                    
                 })
             },200)
         }else{
+            callGetCart.abort();
             sendTime = Date.now();
             self.discountAmount = 0;
             self.finalAmount = 0;
             self.minusAmount = 0;
-            c_notifychangecheck();
+            self.checkChanged.notify();
         }
     },
  observeItemPrice: function(Item,dataitem){
@@ -366,4 +417,4 @@ Item.prototype.updateInventory = function(inventorShort,i_notifyinventoryshort){
      Cart: Cart,
      Item: Item
  }
- })(jQuery)
+ }(jQuery)
