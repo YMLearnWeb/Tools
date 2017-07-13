@@ -47,8 +47,48 @@ var cart = new ShoppingCart.Cart();
  * @constructor
  * @param Node emptyNode
  */
-function CartPage(cart){
+function CartPage(cart,item){
+    this._cart = cart;
+    this._item = item;
     var self = this;
+    this._item.priceUpdated.attach(function(){
+
+    });
+    this._item.quantityUpdated.attach(function(){
+
+    });
+    this._item.statusUpdated.attach(function(){
+
+    });
+    this._item.inventoryChecked.attach(function(){
+
+    });
+    this._cart.allCleared.attach(function(){
+
+    });
+    this._cart.allSelected.attach(function(){
+
+    });
+    this._cart.deAllSelected.attach(function(){
+
+    });
+    this._cart.itemRemoved.attach(function(){
+
+    });
+    this._cart.itemsRemoved.attach(function(){
+
+    });
+    this._cart.quantityGot.attach(function(){
+
+    });
+    this._cart.quantitySaved.attach(function(){
+
+    });
+    this._cart.checkChanged.attach(function(){
+
+    });
+
+
     this._editQuantityBtn.on('click',function(e){
         var itemId = $(e.target).data(value);
         var item = cart._itemGroups[itemId];
@@ -56,9 +96,11 @@ function CartPage(cart){
             self.changeQuantity(item);
         });
     });
+    
     this._previewBtn.on('click',function(e){
         previewImg();
     });
+    
     this._checkBtn.on('click',function(e){
         var target = e.target;
         var itemId = $(e.target).data(value);
@@ -71,15 +113,19 @@ function CartPage(cart){
             self.changeCheck(item);
         })
     });
+    
     this._selectAllBtn.on('click',function(e){
         notifySelectAll(this);
     });
+    
     this._batchDeleteBtn.on('click',function(e){
         notifyBatchDelete();
     });
+    
     this._placeOrderBtn.on('click',function(){
         notifyPlaceOrder();
     });
+
     this._discountAmountEle = $('#discountPrice');
     this._activityAmountEle = $('#minusPrice');
     this._finalAmountEle = $('#totalPrice');
